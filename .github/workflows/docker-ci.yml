@@ -1,0 +1,12 @@
+name: GitHub Actions Demo
+run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+on: [push]
+jobs:
+  one-credit-session:
+    runs-on: ubuntu-latest
+    steps:
+      - name: learning commands
+        run: echo "docker cli commands"
+
+      - name: Documentation
+        run: echo "Documentation in Github Wiki"
