@@ -28,7 +28,7 @@ jobs:
       - name: Convert TXT to JSON
         run: |
           mkdir -p job-logs-json
-          for file in job-logs/*.txt; do
+          for file in jobs-log/*.txt; do
             filename=$(basename "$file" .txt)
             echo "{\"log\": \"$(tr '\n' '\\n' < "$file" | sed 's/"/\\"/g')\"}" > "job-logs-json/${filename}.json"
           done
