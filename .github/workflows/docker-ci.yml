@@ -48,16 +48,17 @@ jobs:
 
             while IFS= read -r line; do
               # Add each line to the log events array
-              LOG_EVENTS+="{\"timestamp\": $TIMESTAMP, \"message\": \"$line\"}"
+              LOG_EVENTS+="{\"timestamp\": $TIMESTAMP, \"message\": \"$line\"},"
               TIMESTAMP=$(($(date +%s%3N) + 1))  # Increment timestamp for each log entry
             done < "$file"
 
-            # Upload the logs to CloudWatch
+            # Remove the trailing comma and wrap in JSON array
             if [ -n "$LOG_EVENTS" ]; then
+              LOG_EVENTS="[${LOG_EVENTS%,}]"
               echo "Uploading logs to CloudWatch"
               aws logs put-log-events \
                 --log-group-name "$LOG_GROUP_NAME" \
                 --log-stream-name "$LOG_STREAM_NAME" \
-                --log-events "[${LOG_EVENTS}]"
+                --log-events "$LOG_EVENTS"
             fi
           done
