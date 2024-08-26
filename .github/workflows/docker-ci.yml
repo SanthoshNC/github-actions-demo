@@ -25,6 +25,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
 
+      - name: Create job-logs-json directory
+        run: mkdir -p job-logs-json
+
       - name: Convert First TXT to JSON
         id: convert
         run: |
