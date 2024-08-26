@@ -45,11 +45,18 @@ jobs:
           # Create log stream if it does not exist
           aws logs create-log-stream --log-group-name "$log_group_name" --log-stream-name "$log_stream_name" || true
 
-          # Put logs into CloudWatch
+          # Prepare log events
+          log_events=""
           for file in job-logs-json/*.json; do
-            log_events=$(cat "$file" | awk -v now=$(date +%s%3N) '{print "{\"timestamp\": \"" now "\", \"message\": \"" $0 "\"}"}')
-            aws logs put-log-events \
-              --log-group-name "$log_group_name" \
-              --log-stream-name "$log_stream_name" \
-              --log-events "$log_events"
+            timestamp=$(date +%s%3N)
+            message=$(cat "$file" | jq -Rsa .)
+            log_events+="{\"timestamp\": $timestamp, \"message\": $message},"
           done
+          # Remove trailing comma
+          log_events=${log_events%,}
+
+          # Put logs into CloudWatch
+          aws logs put-log-events \
+            --log-group-name "$log_group_name" \
+            --log-stream-name "$log_stream_name" \
+            --log-events "$log_events"
