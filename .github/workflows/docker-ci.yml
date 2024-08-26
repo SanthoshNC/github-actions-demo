@@ -40,14 +40,21 @@ jobs:
           for file in jobs-log/logs-*.txt; do
             echo "Shipping $file to CloudWatch"
 
-            # Read the log file and push each line to CloudWatch
+            # Initialize the JSON array
+            LOG_EVENTS="["
+
+            # Read the log file and add each line to the JSON array
             while read -r line; do
               TIMESTAMP=$(date +%s%3N)  # Current time in milliseconds
-              LOG_EVENT="{\"timestamp\": $TIMESTAMP, \"message\": \"$line\"}"
-
-              aws logs put-log-events \
-                --log-group-name $LOG_GROUP_NAME \
-                --log-stream-name $LOG_STREAM_NAME \
-                --log-events "$LOG_EVENT"
+              LOG_EVENTS+="{\"timestamp\": $TIMESTAMP, \"message\": \"$line\"},"
             done < "$file"
+
+            # Remove the trailing comma and close the JSON array
+            LOG_EVENTS="${LOG_EVENTS%,}]"
+
+            # Send the log events to CloudWatch
+            aws logs put-log-events \
+              --log-group-name $LOG_GROUP_NAME \
+              --log-stream-name $LOG_STREAM_NAME \
+              --log-events "$LOG_EVENTS"
           done
