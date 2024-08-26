@@ -18,17 +18,36 @@ jobs:
       - name: list files in jobs-log
         run: ls -lrt jobs-log
         
-      - name: view content
-        run: cat $(ls jobs-log | head -n 1 | sed 's|^|jobs-log/|')
+      - name: Configure AWS CLI
+        run: aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }} && \
+              aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }} && \
+              aws configure set region ${{ secrets.AWS_REGION }}
 
-      - name: Deploy
-        uses: mooyoul/cloudwatch-logs-actions@v1.1.5
-        env:
-          AWS_DEFAULT_REGION: us-west-2
-          AWS_REGION: us-west-2
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        with:
-          group: my-open-project
-          stream: ${{ github.sha }}
-          retention: 14
+      - name: Convert TXT to JSON
+        run: |
+          mkdir -p job-logs-json
+          for file in job-logs/*.txt; do
+            filename=$(basename "$file" .txt)
+            echo "{\"log\": \"$(tr '\n' '\\n' < "$file" | sed 's/"/\\"/g')\"}" > "job-logs-json/${filename}.json"
+          done
+
+      - name: Upload JSON to CloudWatch
+        run: |
+          log_group_name="GithubActionsLogGroup"
+          current_date=$(date +%Y-%m-%d)
+          log_stream_name="log-stream-$current_date"
+
+          # Create log group if it does not exist
+          aws logs create-log-group --log-group-name "$log_group_name" || true
+          
+          # Create log stream if it does not exist
+          aws logs create-log-stream --log-group-name "$log_group_name" --log-stream-name "$log_stream_name" || true
+
+          # Put logs into CloudWatch
+          for file in job-logs-json/*.json; do
+            log_events=$(cat "$file" | awk -v now=$(date +%s%3N) '{print "{\"timestamp\": \"" now "\", \"message\": \"" $0 "\"}"}')
+            aws logs put-log-events \
+              --log-group-name "$log_group_name" \
+              --log-stream-name "$log_stream_name" \
+              --log-events "$log_events"
+          done
