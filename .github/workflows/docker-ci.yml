@@ -44,21 +44,23 @@ jobs:
 
             # Initialize the JSON array
             LOG_EVENTS=""
-            TIMESTAMP=$(date +%s%3N)  # Set a base timestamp
 
             while IFS= read -r line; do
-              # Add each line to the log events array
-              LOG_EVENTS+="{\"timestamp\": $TIMESTAMP, \"message\": \"$line\"},"
-              TIMESTAMP=$(($(date +%s%3N) + 1))  # Increment timestamp for each log entry
+              # Format each log line as a JSON object
+              TIMESTAMP=$(date +%s%3N)  # Use current time in milliseconds
+              LOG_EVENTS+="{\"timestamp\": $TIMESTAMP, \"message\": \"$line\"}\n"
             done < "$file"
 
-            # Remove the trailing comma and wrap in JSON array
+            # If LOG_EVENTS is not empty, remove the trailing newline and wrap it in an array
             if [ -n "$LOG_EVENTS" ]; then
-              LOG_EVENTS="[${LOG_EVENTS%,}]"
+              LOG_EVENTS="[${LOG_EVENTS%\\n}]"
               echo "Uploading logs to CloudWatch"
               aws logs put-log-events \
                 --log-group-name "$LOG_GROUP_NAME" \
                 --log-stream-name "$LOG_STREAM_NAME" \
+                --log-events "$LOG_EVENTS"
+            fi
+          done
                 --log-events "$LOG_EVENTS"
             fi
           done
