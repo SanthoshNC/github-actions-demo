@@ -21,10 +21,43 @@ jobs:
       - name: view content
         run: cat $(ls jobs-log | head -n 1 | sed 's|^|jobs-log/|')
 
-      - name: Trigger Target Workflow
+      - name: Configure AWS CLI
         run: |
-          curl -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/target-workflow.yml/dispatches \
-            -d "{\"ref\":\"main\", \"inputs\": {\"workflow_name\": \"docker-ci\"}}"
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set default.region ${{ secrets.AWS_REGION }}
+
+      - name: Create Log Group and Log Stream
+        run: |
+          LOG_GROUP_NAME="GitHubActionsLogs"
+          LOG_STREAM_NAME=$(date '+%Y-%m-%d-%H-%M-%S')
+
+          # Create Log Group if it doesn't exist
+          aws logs create-log-group --log-group-name "$LOG_GROUP_NAME" || true
+
+          # Create Log Stream
+          aws logs create-log-stream --log-group-name "$LOG_GROUP_NAME" --log-stream-name "$LOG_STREAM_NAME"
+
+          # Find and ship log files from jobs-log directory
+          for file in jobs-log/logs-*.txt; do
+            echo "Shipping $file to CloudWatch"
+
+            # Initialize the JSON array
+            LOG_EVENTS=""
+            TIMESTAMP=$(date +%s%3N)  # Set a base timestamp
+
+            while IFS= read -r line; do
+              # Add each line to the log events array
+              LOG_EVENTS+="{\"timestamp\": $TIMESTAMP, \"message\": \"$line\"}"
+              TIMESTAMP=$(($(date +%s%3N) + 1))  # Increment timestamp for each log entry
+            done < "$file"
+
+            # Upload the logs to CloudWatch
+            if [ -n "$LOG_EVENTS" ]; then
+              echo "Uploading logs to CloudWatch"
+              aws logs put-log-events \
+                --log-group-name "$LOG_GROUP_NAME" \
+                --log-stream-name "$LOG_STREAM_NAME" \
+                --log-events "[${LOG_EVENTS}]"
+            fi
+          done
