@@ -1,0 +1,63 @@
+# .github/workflows/download-logs-to-json.yml
+name: Download Logs to JSON
+
+on: [push]
+
+jobs:
+  download_logs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set Repository Variables
+        id: set_vars
+        run: |
+          # Extract repo owner and name from the GITHUB_REPOSITORY environment variable
+          REPO="${{ github.repository }}"
+          REPO_OWNER="${REPO%%/*}"
+          REPO_NAME="${REPO#*/}"
+          
+          echo "REPO_OWNER=$REPO_OWNER" >> $GITHUB_ENV
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+
+      - name: Download Logs
+        id: download_logs
+        run: |
+          # Set variables
+          GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          WORKFLOW_RUN_ID="${{ github.run_id }}"
+
+          # Fetch the logs from GitHub API
+          LOGS_URL="https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/runs/${WORKFLOW_RUN_ID}/logs"
+          LOGS_ZIP="logs.zip"
+          curl -H "Authorization: token $GITHUB_TOKEN" -L "$LOGS_URL" --output "$LOGS_ZIP"
+
+          # Unzip the logs
+          mkdir logs
+          unzip "$LOGS_ZIP" -d logs
+
+      - name: Convert Logs to JSON
+        id: convert_logs
+        run: |
+          LOGS_DIR="logs"
+          LOG_EVENTS=""
+
+          # Process each log file
+          for file in "$LOGS_DIR"/*.txt; do
+            while IFS= read -r line; do
+              TIMESTAMP=$(date +%s%3N)  # Use current time in milliseconds
+              JSON_LINE=$(printf '{"timestamp": %s, "message": "%s"}' "$TIMESTAMP" "$line")
+              LOG_EVENTS=$(printf '%s,%s' "$LOG_EVENTS" "$JSON_LINE")
+            done < "$file"
+          done
+
+          # Remove the leading comma and format the JSON array
+          LOG_EVENTS="[${LOG_EVENTS:1}]"
+          echo "LOG_EVENTS=$LOG_EVENTS" >> $GITHUB_ENV
+
+      - name: Upload JSON to S3
+        run: |
+          ls -lrt
+          cat logs.json
