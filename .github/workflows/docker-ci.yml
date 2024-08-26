@@ -14,5 +14,5 @@ jobs:
           GH_REPO: ${{ github.repository }}
       - name: list files
         run: ls -lrt
-      - name: view log files
-        run: cat jobs-log
+      - name: list files in jobs-log
+        run: ls -lrt jobs-log
