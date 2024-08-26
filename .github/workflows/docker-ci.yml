@@ -25,17 +25,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
 
-      - name: Convert TXT to JSON
+      - name: Convert First TXT to JSON
+        id: convert
         run: |
-          mkdir -p job-logs-json
-          for file in jobs-log/*.txt; do
-            filename=$(basename "$file" .txt)
-            echo "{\"log\": \"$(tr '\n' '\\n' < "$file" | sed 's/"/\\"/g')\"}" > "job-logs-json/${filename}.json"
-          done
+          # Get the first .txt file
+          file=$(ls jobs-log/*.txt | head -n 1)
+          filename=$(basename "$file" .txt)
+          
+          # Read the file, escape characters, and convert to JSON
+          log_message=$(tr '\n' '\\n' < "$file" | sed 's/"/\\"/g')
+          echo "{\"log\": \"$log_message\"}" > "job-logs-json/${filename}.json"
+
+          # Output the filename for the next step
+          echo "Converted JSON file: job-logs-json/${filename}.json"
+          echo "json_file_path=job-logs-json/${filename}.json" >> $GITHUB_ENV
 
       - name: Upload JSON to CloudWatch
         run: |
-          log_group_name="GithubActionsLogGroup"
+          log_group_name="your-log-group"
           current_date=$(date +%Y-%m-%d)
           log_stream_name="log-stream-$current_date"
 
@@ -46,14 +53,10 @@ jobs:
           aws logs create-log-stream --log-group-name "$log_group_name" --log-stream-name "$log_stream_name" || true
 
           # Prepare log events
-          log_events=""
-          for file in job-logs-json/*.json; do
-            timestamp=$(date +%s%3N)
-            message=$(cat "$file" | jq -Rsa .)
-            log_events+="{\"timestamp\": $timestamp, \"message\": $message},"
-          done
-          # Remove trailing comma
-          log_events=${log_events%,}
+          timestamp=$(date +%s%3N)
+          message=$(cat ${{ env.json_file_path }} | jq -Rsa .)
+          
+          log_events="{\"timestamp\": $timestamp, \"message\": $message}"
 
           # Put logs into CloudWatch
           aws logs put-log-events \
