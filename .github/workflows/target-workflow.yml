@@ -3,10 +3,66 @@ name: Target Workflow
 
 on:
   workflow_dispatch:
+    inputs:
+      workflow_name:
+        description: 'Name of the workflow to fetch logs for'
+        required: true
+        default: 'docker-ci'
 
 jobs:
-  example_job:
+  fetch_logs:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Run some action
-        run: echo "Target workflow triggered!"
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set Workflow Name
+        id: set-workflow-name
+        run: echo "WORKFLOW_NAME=${{ github.event.inputs.workflow_name }}" >> $GITHUB_ENV
+
+      - name: Get Workflow Runs
+        run: |
+          WORKFLOW_NAME=${{ env.WORKFLOW_NAME }}
+          RUNS_URL="https://api.github.com/repos/${{ github.repository }}/actions/workflows/${WORKFLOW_NAME}/runs"
+          echo "Fetching workflow runs from $RUNS_URL"
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github+json" \
+               $RUNS_URL > workflow-runs.json
+
+      - name: Parse Workflow Runs
+        id: parse-runs
+        run: |
+          # Extract the most recent run ID
+          RUN_ID=$(jq -r '.workflow_runs[0].id' workflow-runs.json)
+          echo "RUN_ID=${RUN_ID}" >> $GITHUB_ENV
+
+      - name: Get Logs
+        run: |
+          RUN_ID=${{ env.RUN_ID }}
+          LOGS_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/${RUN_ID}/logs"
+          echo "Fetching logs from $LOGS_URL"
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github+json" \
+               $LOGS_URL -o logs.zip
+
+      - name: Unzip Logs
+        run: unzip logs.zip -d logs
+
+      - name: Convert Logs to JSON
+        run: |
+          LOG_JSON="["
+          for log in logs/**/*.txt; do
+            while IFS= read -r line; do
+              TIMESTAMP=$(date +%s%3N)
+              LOG_JSON+="{\"timestamp\": $TIMESTAMP, \"message\": \"$line\"},"
+            done < "$log"
+          done
+          LOG_JSON="${LOG_JSON%,}]"
+          echo "$LOG_JSON" > actions-logs.json
+
+      - name: Upload JSON Logs
+        uses: actions/upload-artifact@v3
+        with:
+          name: logs-json
+          path: actions-logs.json
