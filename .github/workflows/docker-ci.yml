@@ -19,3 +19,35 @@ jobs:
       - name: view content
         run: cat $(ls jobs-log | head -n 1 | sed 's|^|jobs-log/|')
 
+      - name: Configure AWS credentials
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set default.region ${{ secrets.AWS_REGION }}
+
+      - name: Ship logs to CloudWatch
+        run: |
+          LOG_GROUP_NAME="GitHubActionsLogs"
+          LOG_STREAM_NAME=$(date '+%Y-%m-%d-%H-%M-%S')
+
+          # Create Log Group if it doesn't exist
+          aws logs create-log-group --log-group-name $LOG_GROUP_NAME || true
+
+          # Create Log Stream
+          aws logs create-log-stream --log-group-name $LOG_GROUP_NAME --log-stream-name $LOG_STREAM_NAME
+
+          # Find and ship log files from jobs-log directory
+          for file in jobs-log/logs-*.txt; do
+            echo "Shipping $file to CloudWatch"
+
+            # Read the log file and push each line to CloudWatch
+            while read -r line; do
+              TIMESTAMP=$(date +%s%3N)  # Current time in milliseconds
+              LOG_EVENT="{\"timestamp\": $TIMESTAMP, \"message\": \"$line\"}"
+
+              aws logs put-log-events \
+                --log-group-name $LOG_GROUP_NAME \
+                --log-stream-name $LOG_STREAM_NAME \
+                --log-events "$LOG_EVENT"
+            done < "$file"
+          done
