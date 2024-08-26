@@ -1,0 +1,12 @@
+# .github/workflows/target-workflow.yml
+name: Target Workflow
+
+on:
+  workflow_dispatch:
+
+jobs:
+  example_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run some action
+        run: echo "Target workflow triggered!"
