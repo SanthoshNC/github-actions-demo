@@ -10,7 +10,7 @@ jobs:
       - name: Download 24hrs Old Logs
         uses: pawanbahuguna/action-logs/@v1.0.1
         env: 
-          GH_TOKEN: ${{ secrets.GITHUN_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
       - name: list files
         run: ls -lrt
