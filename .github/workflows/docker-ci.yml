@@ -14,47 +14,17 @@ jobs:
           GH_REPO: ${{ github.repository }}
       - name: list files
         run: ls -lrt
+        
       - name: list files in jobs-log
         run: ls -lrt jobs-log
+        
       - name: view content
         run: cat $(ls jobs-log | head -n 1 | sed 's|^|jobs-log/|')
 
-      - name: Configure AWS credentials
+      - name: Trigger Target Workflow
         run: |
-          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws configure set default.region ${{ secrets.AWS_REGION }}
-
-      - name: Ship logs to CloudWatch
-        run: |
-          LOG_GROUP_NAME="GitHubActionsLogs"
-          LOG_STREAM_NAME=$(date '+%Y-%m-%d-%H-%M-%S')
-
-          # Create Log Group if it doesn't exist
-          aws logs create-log-group --log-group-name $LOG_GROUP_NAME || true
-
-          # Create Log Stream
-          aws logs create-log-stream --log-group-name $LOG_GROUP_NAME --log-stream-name $LOG_STREAM_NAME
-
-          # Find and ship log files from jobs-log directory
-          for file in jobs-log/logs-*.txt; do
-            echo "Shipping $file to CloudWatch"
-
-            # Initialize the JSON array
-            LOG_EVENTS="["
-
-            # Read the log file and add each line to the JSON array
-            while read -r line; do
-              TIMESTAMP=$(date +%s%3N)  # Current time in milliseconds
-              LOG_EVENTS+="{\"timestamp\": $TIMESTAMP, \"message\": \"$line\"},"
-            done < "$file"
-
-            # Remove the trailing comma and close the JSON array
-            LOG_EVENTS="${LOG_EVENTS%,}]"
-
-            # Send the log events to CloudWatch
-            aws logs put-log-events \
-              --log-group-name $LOG_GROUP_NAME \
-              --log-stream-name $LOG_STREAM_NAME \
-              --log-events "$LOG_EVENTS"
-          done
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/target-workflow.yml/dispatches \
+            -d '{"ref":"main"}'
